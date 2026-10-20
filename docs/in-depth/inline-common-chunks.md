@@ -28,8 +28,6 @@ Entries, dynamic import targets and manual chunks stay as files. Matching any mo
 
 Inlining requires ESM output and `preserveEntrySignatures: false`, which allows unused entry exports to be removed. [`strictExecutionOrder`](/reference/OutputOptions.strictExecutionOrder) is enabled automatically and cannot be disabled.
 
-Inlining can reduce requests at the cost of duplicated downloads and less cache reuse: changing shared code changes every file containing it. The shared runtime also adds a file and execution overhead.
-
 ::: details Compatibility and exclusions
 
 `preserveModules`, `experimental.devMode` and `experimental.onDemandWrapping` must be off. Test with `strictExecutionOrder: true` first, particularly if the application has [top-level await in static import cycles](https://github.com/rolldown/rolldown/issues/9548).
@@ -171,6 +169,20 @@ A's call to `init_helper` initializes the shared `count`, and `inc()` returns `1
 Separating registration from module initialization makes factories available before consumers run, while `strictExecutionOrder` controls when the module's top-level code executes.
 
 All copies must import the same runtime chunk to share state. Reusing that runtime across different builds is unsupported.
+
+### Loading and caching
+
+Registering the helper from A does not remove the copy embedded in B's file; fetching B still transfers that code.
+
+| Loading scenario                                  | Separate helper chunk        | Helper inlined into A and B              |
+| ------------------------------------------------- | ---------------------------- | ---------------------------------------- |
+| Cold load of A                                    | Fetch the helper separately. | Fetch the helper inside A.               |
+| Then load B                                       | Reuse the loaded helper.     | Fetch another copy inside B.             |
+| Load an updated A; the unchanged helper is cached | Reuse the cached helper.     | Fetch the helper again inside the new A. |
+
+Saving a request may justify duplicating a small helper. With `maxSize: Infinity`, the same tradeoff applies to the large library shared by A, B and C: if it is eligible for inlining, loading all three entries transfers three copies of the library. The runtime also adds a shared file and execution overhead.
+
+`maxSize` tests a chunk's source size, not the total bytes its copies add to a user's session. Fewer chunks therefore do not guarantee faster loading. Compare loading times with and without inlining for initial loads and later navigation in your application, including cache reuse, before choosing whether to enable it or raise the threshold.
 
 ## Optimizations
 
