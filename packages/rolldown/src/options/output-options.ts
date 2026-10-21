@@ -1042,11 +1042,10 @@ export type ExperimentalInlineCommonChunksOptions = {
   /**
    * Inline eligible automatic common chunks whose size is strictly smaller than this value.
    * Size is the sum of their modules' transformed source sizes in bytes, before rendering,
-   * minification and compression. This is not a limit on the size of the emitted files or
-   * the total amount of duplicated code.
+   * minification and compression.
    *
    * Must be a non-negative safe integer or `Infinity`. `0` disables inlining.
-   * `Infinity` removes the size limit; other eligibility checks still apply.
+   * `Infinity` removes the size limit.
    *
    * @default 0
    */
@@ -1054,7 +1053,7 @@ export type ExperimentalInlineCommonChunksOptions = {
   /**
    * A matcher for module ids, or an array of them: a string (matched as a regular expression), a
    * RegExp, or a function, each applied like {@linkcode CodeSplittingGroup.test | test}. A common
-   * chunk is kept as a file when any of its modules matches any matcher.
+   * chunk is not inlined when any of its modules matches any matcher.
    */
   exclude?:
     | StringOrRegExp
@@ -1097,15 +1096,14 @@ export type CodeSplittingOptions = {
    */
   groups?: CodeSplittingGroup[];
   /**
-   * Replace small automatic common chunks with factory copies in their consumers.
-   * A shared runtime registry preserves module state, execution and export identity across
-   * copies. This can reduce requests at the cost of duplicated code and runtime overhead.
+   * Inline small automatic common chunks into their consumers to reduce the chunk count.
+   * This duplicates code and adds runtime overhead.
    *
-   * Set `maxSize` above `0` to enable it. Requires `output.format: 'es'`, code splitting,
-   * and an explicit {@linkcode InputOptions.preserveEntrySignatures | preserveEntrySignatures}: `false`.
-   * Turns on {@linkcode OutputOptions.strictExecutionOrder | strictExecutionOrder} when omitted;
-   * explicitly setting it to `false` is an error. `output.preserveModules`, `experimental.devMode`
-   * and `experimental.onDemandWrapping` must be off.
+   * Set `maxSize` above `0` to enable it. Requires {@linkcode OutputOptions.format | output.format: 'es'}
+   * and an explicit {@linkcode InputOptions.preserveEntrySignatures | preserveEntrySignatures: false}.
+   * Requires {@linkcode OutputOptions.strictExecutionOrder | strictExecutionOrder},
+   * which is enabled automatically when omitted.
+   * Incompatible with {@linkcode OutputOptions.preserveModules | output.preserveModules}.
    *
    * Plugins must support modules appearing in multiple output chunks. See the
    * [Inline Common Chunks guide](https://rolldown.rs/in-depth/inline-common-chunks)
@@ -1113,7 +1111,9 @@ export type CodeSplittingOptions = {
    *
    * @example
    * ```js
-   * export default {
+   * import { defineConfig } from 'rolldown';
+   *
+   * export default defineConfig({
    *   preserveEntrySignatures: false,
    *   output: {
    *     format: 'es',
@@ -1123,7 +1123,7 @@ export type CodeSplittingOptions = {
    *       },
    *     },
    *   },
-   * };
+   * });
    * ```
    *
    * @experimental This feature is experimental. Its behavior and option shape may change in any release.

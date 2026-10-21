@@ -24,25 +24,33 @@ export default defineConfig({
 
 `maxSize` uses transformed source sizes, summed per chunk before rendering, minification and compression. It defaults to `0` (disabled); `Infinity` removes the size limit.
 
-Entries, dynamic import targets and manual chunks stay as files. Matching any module with [`exclude`](/reference/TypeAlias.ExperimentalInlineCommonChunksOptions#exclude) keeps its entire common chunk as a file.
+Entries, dynamic import targets and manual chunks are not inlined. Matching any module with [`exclude`](/reference/TypeAlias.ExperimentalInlineCommonChunksOptions#exclude) prevents its entire common chunk from being inlined.
 
-Inlining requires ESM output and `preserveEntrySignatures: false`, which allows unused entry exports to be removed. [`strictExecutionOrder`](/reference/OutputOptions.strictExecutionOrder) is enabled automatically and cannot be disabled.
+Inlining requires ESM output and [`preserveEntrySignatures: false`](/reference/InputOptions.preserveEntrySignatures), which allows unused entry exports to be removed. [`strictExecutionOrder`](/reference/OutputOptions.strictExecutionOrder) is enabled automatically and cannot be disabled.
 
 ::: details Compatibility and exclusions
 
-`preserveModules`, `experimental.devMode` and `experimental.onDemandWrapping` must be off. Test with `strictExecutionOrder: true` first, particularly if the application has [top-level await in static import cycles](https://github.com/rolldown/rolldown/issues/9548).
+[`output.preserveModules`](/reference/OutputOptions.preserveModules) must be off. With `strictExecutionOrder`, some [static import cycles involving top-level await](https://github.com/rolldown/rolldown/issues/9548) can leave module initialization unresolved.
 
-Some common chunks stay as files even below the threshold. These include chunks containing top-level await or a static dependency on it, retained `import.meta`, unresolved dynamic imports, or imports of external modules. A chunk also stays a file if another output chunk re-exports one of its bindings. Direct `eval` and static cycles involving a chunk that stays a file can prevent inlining too. Declaration modules and the builtin `asset` and `copy` modules are excluded. Resolved internal dynamic imports can be copied; their targets still need files to load.
+Some common chunks are not inlined even below the threshold. These include chunks containing top-level await or a static dependency on it, retained `import.meta`, unresolved dynamic imports, or imports of external modules. A chunk is also excluded if another output chunk re-exports one of its bindings. Direct `eval` and static cycles involving a chunk that cannot be inlined can prevent inlining too. Declaration modules and the builtin `asset` and `copy` modules are excluded.
 
-Static cycles through external modules back into generated output are unsupported, including cycles that return to an entry. Bundle the modules forming such cycles together or exclude their shared dependencies from inlining.
+When `import('./detail.js')` resolves to an internal module, the containing common chunk can still be inlined. Rolldown copies the `import()` expression and rewrites its path for each output chunk. The target chunk remains separate.
 
-Plugins see an inlined module in the `moduleIds` and `modules` of every output chunk containing it. CSS extraction and SSR manifest plugins that assume a module belongs to one chunk need to account for this. For Vite builds, add this matcher to `experimentalInlineCommonChunks` to keep style modules from being copied into multiple stylesheets:
+Static import cycles through modules marked [external](/reference/InputOptions.external) are unsupported. For example:
+
+```text
+dist/entry.js → external.js → dist/entry.js
+```
+
+Both arrows are static imports, and `external.js` is excluded from the bundle. Rolldown cannot see its import back into the generated entry, so it cannot guarantee that shared factories are registered before use. Bundle the modules in the cycle together or exclude their shared dependencies from inlining.
+
+Plugins see an inlined module in the [`moduleIds`](/reference/Interface.RenderedChunk#moduleids) and [`modules`](/reference/Interface.RenderedChunk#modules) of every output chunk containing it. CSS extraction and SSR manifest plugins that assume a module belongs to one chunk need to account for this. For Vite builds, add this matcher to `experimentalInlineCommonChunks` to keep style modules from being copied into multiple stylesheets:
 
 ```js
 exclude: /\.(css|scss|sass|less|styl|stylus|pcss|postcss|sss)(\?|$)/,
 ```
 
-A `renderChunk` hook that embeds different values in different copies makes the first copy registered with the runtime determine the value for all consumers. Exclude affected modules, as well as modules that rely on separate file-local addon bindings or their initialization order. If code relies on function or class `.name`, use [`output.keepNames`](/reference/OutputOptions.keepNames), since each copy is named alongside the code in its containing file.
+A `renderChunk` hook that embeds different values in different copies makes the first copy registered with the runtime determine the value for all consumers. Exclude affected modules, as well as modules that rely on separate file-local addon bindings or their initialization order.
 
 :::
 
@@ -53,7 +61,7 @@ Automatic code splitting follows two rules inherited from Rollup's output model:
 1. A module's code appears in only one output chunk.
 2. An entry only loads application modules that are reachable from that entry.
 
-Consider the three entries in the configuration above. All three import a large library, and A and B also import a small helper with a counter:
+The configuration in [Usage](#usage) defines three entries: A, B and C. All three import a large library; A and B also import a small helper with a counter:
 
 ::: code-group
 
@@ -134,8 +142,14 @@ Pasting the helper's body into both files would create two counters, both starti
 
 Rolldown wraps the common chunk in a _factory_ function and registers each copy with a shared runtime. Both A and B contain this code (names simplified; library import and entry wrappers omitted):
 
+<!-- prettier-ignore -->
 ```js
-import { __share, __share_require, __share_export, __esmMin } from './rolldown-runtime.js';
+import {
+  __share,
+  __share_require,
+  __share_export,
+  __esmMin,
+} from './rolldown-runtime.js';
 
 __share('helper', (exports) => {
   let count;
@@ -216,7 +230,7 @@ console.log((0, helper.inc)());
 
 Rolldown omits a copy only when every known path from a configured or plugin-emitted entry supplies the factory first. An earlier static dependency can supply it too.
 
-This is why loading an arbitrary output chunk by its URL can fail: a non-entry chunk may depend on registrations from its parents. Imports hidden in generated strings or made by external modules are not part of the graph Rolldown checks. Modules that need to load independently should be entries; a plugin can emit one with `preserveSignature: 'strict'` when its exports must be kept. Another option is to exclude its shared dependencies, including transitive ones, from inlining.
+This is why loading an arbitrary output chunk by its URL can fail: a non-entry chunk may depend on registrations from its parents. Imports hidden in generated strings or made by external modules are not part of the graph Rolldown checks. Modules that need to load independently should be listed in `input` or emitted by a plugin with `this.emitFile({ type: 'chunk', id: 'src/plugin.js' })`. Use `preserveSignature: 'strict'` on the emitted entry if its exports must be kept. Another option is to exclude its shared dependencies, including transitive ones, from inlining.
 
 ### Keeping modules in the same scope
 
