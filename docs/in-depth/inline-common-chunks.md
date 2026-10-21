@@ -26,33 +26,11 @@ export default defineConfig({
 
 Entries, dynamic import targets and manual chunks are not inlined. Matching any module with [`exclude`](/reference/TypeAlias.ExperimentalInlineCommonChunksOptions#exclude) prevents its entire common chunk from being inlined.
 
-Inlining requires ESM output and [`preserveEntrySignatures: false`](/reference/InputOptions.preserveEntrySignatures), which allows unused entry exports to be removed. [`strictExecutionOrder`](/reference/OutputOptions.strictExecutionOrder) is enabled automatically and cannot be disabled.
+Inlining requires:
 
-::: details Compatibility and exclusions
-
-[`output.preserveModules`](/reference/OutputOptions.preserveModules) must be off. With `strictExecutionOrder`, some [static import cycles involving top-level await](https://github.com/rolldown/rolldown/issues/9548) can leave module initialization unresolved.
-
-Some common chunks are not inlined even below the threshold. These include chunks containing top-level await or a static dependency on it, retained `import.meta`, unresolved dynamic imports, or imports of external modules. A chunk is also excluded if another output chunk re-exports one of its bindings. Direct `eval` and static cycles involving a chunk that cannot be inlined can prevent inlining too. Declaration modules and the builtin `asset` and `copy` modules are excluded.
-
-When `import('./detail.js')` resolves to an internal module, the containing common chunk can still be inlined. Rolldown copies the `import()` expression and rewrites its path for each output chunk. The target chunk remains separate.
-
-Static import cycles through modules marked [external](/reference/InputOptions.external) are unsupported. For example:
-
-```text
-dist/entry.js → external.js → dist/entry.js
-```
-
-Both arrows are static imports, and `external.js` is excluded from the bundle. Rolldown cannot see its import back into the generated entry, so it cannot guarantee that shared factories are registered before use. Bundle the modules in the cycle together or exclude their shared dependencies from inlining.
-
-Plugins see an inlined module in the [`moduleIds`](/reference/Interface.RenderedChunk#moduleids) and [`modules`](/reference/Interface.RenderedChunk#modules) of every output chunk containing it. CSS extraction and SSR manifest plugins that assume a module belongs to one chunk need to account for this. For Vite builds, add this matcher to `experimentalInlineCommonChunks` to keep style modules from being copied into multiple stylesheets:
-
-```js
-exclude: /\.(css|scss|sass|less|styl|stylus|pcss|postcss|sss)(\?|$)/,
-```
-
-A `renderChunk` hook that embeds different values in different copies makes the first copy registered with the runtime determine the value for all consumers. Exclude affected modules, as well as modules that rely on separate file-local addon bindings or their initialization order.
-
-:::
+- ESM output ([`output.format: 'es'`](/reference/OutputOptions.format)).
+- [`preserveEntrySignatures: false`](/reference/InputOptions.preserveEntrySignatures), which allows unused entry exports to be removed.
+- [`strictExecutionOrder`](/reference/OutputOptions.strictExecutionOrder) enabled. Rolldown enables it automatically when omitted.
 
 ## How it works
 
@@ -182,7 +160,7 @@ A's call to `init_helper` initializes the shared `count`, and `inc()` returns `1
 
 Separating registration from module initialization makes factories available before consumers run, while `strictExecutionOrder` controls when the module's top-level code executes.
 
-All copies must import the same runtime chunk to share state. Reusing that runtime across different builds is unsupported.
+All copies must import the same runtime chunk to share state.
 
 ### Loading and caching
 
@@ -230,10 +208,27 @@ console.log((0, helper.inc)());
 
 Rolldown omits a copy only when every known path from a configured or plugin-emitted entry supplies the factory first. An earlier static dependency can supply it too.
 
-This is why loading an arbitrary output chunk by its URL can fail: a non-entry chunk may depend on registrations from its parents. Imports hidden in generated strings or made by external modules are not part of the graph Rolldown checks. Modules that need to load independently should be listed in `input` or emitted by a plugin with `this.emitFile({ type: 'chunk', id: 'src/plugin.js' })`. Use `preserveSignature: 'strict'` on the emitted entry if its exports must be kept. Another option is to exclude its shared dependencies, including transitive ones, from inlining.
-
 ### Keeping modules in the same scope
 
 Rolldown wraps the whole common chunk in one factory, so its modules can refer to each other directly. A minifier can rename and inline code within that scope. References from outside the factory go through its exports object, which limits optimization across the boundary.
+
+## Compatibility
+
+### Chunk selection
+
+A common chunk is not inlined, even below `maxSize`, if:
+
+- It contains top-level await or statically depends on a module that does.
+- It contains `import.meta` that remains after tree shaking.
+- It contains an unresolved dynamic import or imports an external module.
+- Another output chunk re-exports one of its bindings.
+- It contains declaration modules or builtin `asset` or `copy` modules.
+
+Direct `eval` and static cycles involving a chunk that is not inlined can also prevent inlining.
+
+### Plugins
+
+- An inlined module appears in the [`moduleIds`](/reference/Interface.RenderedChunk#moduleids) and [`modules`](/reference/Interface.RenderedChunk#modules) of every chunk containing a copy. CSS extraction and SSR manifest plugins must account for a module belonging to multiple chunks.
+- If a `renderChunk` hook gives copies different values, the first registered copy determines the value for all consumers. Use [`exclude`](/reference/TypeAlias.ExperimentalInlineCommonChunksOptions#exclude) for affected modules.
 
 For more background, see the [design RFC](https://github.com/rolldown/rolldown/discussions/10693). Application results and bug reports are welcome in the [feedback issue](https://github.com/rolldown/rolldown/issues/11040).

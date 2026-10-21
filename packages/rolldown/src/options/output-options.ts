@@ -1032,7 +1032,7 @@ export type AdvancedChunksGroup = CodeSplittingGroup;
  * Options for [`output.codeSplitting.experimentalInlineCommonChunks`](https://rolldown.rs/reference/OutputOptions.codeSplitting#experimentalinlinecommonchunks).
  *
  * See the [Inline Common Chunks guide](https://rolldown.rs/in-depth/inline-common-chunks)
- * for how inlining works, its tradeoffs, and compatibility with plugins and module loading.
+ * for how inlining works, its tradeoffs, and compatibility with plugins.
  *
  * @experimental This feature is experimental. Its behavior and option shape may change in any release.
  *
@@ -1107,7 +1107,7 @@ export type CodeSplittingOptions = {
    *
    * Plugins must support modules appearing in multiple output chunks. See the
    * [Inline Common Chunks guide](https://rolldown.rs/in-depth/inline-common-chunks)
-   * for behavior, loading-path requirements and compatibility, including Vite CSS handling.
+   * for behavior, tradeoffs and plugin compatibility.
    *
    * @example
    * ```js
