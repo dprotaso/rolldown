@@ -229,6 +229,16 @@ Direct `eval` and static cycles involving a chunk that is not inlined can also p
 ### Plugins
 
 - An inlined module appears in the [`moduleIds`](/reference/Interface.RenderedChunk#moduleids) and [`modules`](/reference/Interface.RenderedChunk#modules) of every chunk containing a copy. CSS extraction and SSR manifest plugins must account for a module belonging to multiple chunks.
+
+  ::: info Vite
+  For Vite builds, add this `exclude` matcher to `experimentalInlineCommonChunks` to prevent CSS from being duplicated across output stylesheets:
+
+  ```js
+  exclude: /\.(css|scss|sass|less|styl|stylus|pcss|postcss|sss)(\?|$)/,
+  ```
+
+  :::
+
 - If a `renderChunk` hook gives copies different values, the first registered copy determines the value for all consumers. Use [`exclude`](/reference/TypeAlias.ExperimentalInlineCommonChunksOptions#exclude) for affected modules.
 
 For more background, see the [design RFC](https://github.com/rolldown/rolldown/discussions/10693). Application results and bug reports are welcome in the [feedback issue](https://github.com/rolldown/rolldown/issues/11040).
